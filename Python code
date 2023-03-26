@@ -1,0 +1,169 @@
+data = pd.read_csv("test.csv") 
+first_row = data.head(1)
+last_row = data.tail(1)
+
+app = Dash(__name__)
+app.layout = html.Div(
+    children=[
+        html.H1(children="Bitcoin WebScraper Project", style={"text-align": "center"}),
+        html.Div(
+            id="daily-report",
+            children=[
+                html.H3("Daily Report (Yesterday):"),
+                html.P("Volatility: 0%"),
+                html.P(f"Open Price: {first_row['Price'].values[0]}"),
+                html.P(f"Close Price: {last_row['Price'].values[0]}"),
+            ],
+            style={
+                    "margin-top": "20px",
+                    "padding": "10px",
+                    "border": "1px solid black",
+                    "justify-content": "space-between",
+                    "border-radius": "5px",
+                    "background-color": "#FFFFFF",
+                },
+            
+        ),
+        html.Div(
+            children=[
+                html.Div(id='live-update-text'),
+                dcc.Graph(
+                    id='live-update-graph',
+                    figure={
+                        "data": [
+                            {
+                                "x": data["date"],
+                                "y": data["Price"],
+                                "type": "lines",
+                                "name": "Price",
+                            }
+                        ],
+                        "layout": {
+                            "title": "Bitcoin Price by Date",
+                            "xaxis": {"title": "Date"},
+                            "yaxis": {"title": "Price ($)"},
+                        },
+                        
+                    },
+                    style={"height": "400px", "justify-content": "space-between",},
+                ),
+                dcc.Interval(
+                    id='interval-component',
+                    interval=50*10000, # in milliseconds
+                    n_intervals=0
+                )
+                
+            ],
+           
+        ),
+        html.Div(
+            children=[
+                dcc.DatePickerSingle(
+                    id="my-date-picker",
+                    min_date_allowed=datee(2023, 3, 16),
+                    date=datee(2023, 3, 16),
+                    style={"margin-top": "20px", "text-align": "center"},
+                ),
+                dcc.Graph(
+                    id="my-graph",
+                    style={"height": "400px"},
+                ),
+            ],
+            style={
+                "display": "flex",
+                "flex-wrap": "wrap",
+                "justify-content": "space-between",
+                "margin-top": "20px",
+            },
+        ),
+    ],
+    style={
+        "background-color": "#F7F7F7",
+        "padding": "20px",
+        "min-height": "100vh",
+    },
+    
+)
+
+@app.callback(
+    Output("my-graph", "figure"),
+    Input("my-date-picker", "date"),
+)
+def update_graph(date_value):
+    if date_value:
+        date_value = datetime.strptime(date_value, "%Y-%m-%d").strftime("%d-%B-%Y")
+        dff = data[data["date"] == date_value]
+        if not dff.empty:
+            dff["datetime"] = pd.to_datetime(dff["date"] + " " + dff["time"])
+            dff = dff.set_index("datetime")
+            fig = px.line(dff, x=dff.index, y="Price")
+            fig.update_layout(
+                title=f"Bitcoin Price on {date_value}",
+                xaxis_title="Time",
+                yaxis_title="Price ($k)",
+            )
+            return fig
+
+@app.callback(Output('daily-report', 'children'),
+              Input('interval-component', 'n_intervals'))
+def update_metrics(n):
+    global first_row 
+    global last_row
+    global data
+    today = datetime.utcnow()
+    todays = datetime.utcnow().strftime("%d-%B-%Y")
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%d-%B-%Y")
+    
+    if today.hour >= 20:
+
+        data = pd.read_csv("test.csv") 
+        dff = data[data["date"] == todays]
+        first_row = dff.iloc[0]["Price"]
+        last_row = dff.iloc[-1]["Price"]
+        Volatility_row = dff["Price"].pct_change().std()
+
+        return [
+            html.H3(f"Daily Report ({todays}):"),
+            html.P(f"Volatility: ${ Volatility_row } "),
+            html.P(f"Open Price: {first_row}"),
+            html.P(f"Close Price: {last_row}"),
+        ]
+        
+    else:
+        data = pd.read_csv("test.csv") 
+        dff = data[data["date"] == yesterday]
+        
+        first_row = dff.iloc[0]["Price"]
+        last_row = dff.iloc[-1]["Price"]
+        Volatility_row = dff["Price"].pct_change().std()
+        return [
+            html.H3(f"Daily Report ({yesterday}):"),
+            html.P(f"Volatility: ${ Volatility_row } "),
+            html.P(f"Open Price: {first_row}"),
+            html.P(f"Close Price: {last_row}"),
+        ]
+        
+
+@app.callback(Output('live-update-graph', 'figure'),
+              Input('interval-component', 'n_intervals'))
+def update_metrics(n):
+    global data
+
+    today = datetime.utcnow()
+    if today.hour == 20:
+        data = pd.read_csv("test.csv") 
+    return {
+       'data': [
+            {
+                "x": data['date'],
+                "y": data['Price'],
+                "type": "lines",
+                "name": "Price",
+            }
+        ],
+   }
+
+if __name__ == "__main__":
+    app.run_server(
+        host="0.0.0.0", debug=True , dev_tools_hot_reload=False
+    )
